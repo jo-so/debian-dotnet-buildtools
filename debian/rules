@@ -1,0 +1,35 @@
+#!/usr/bin/make -f
+
+DOTNET_VERSION = 2.0.0-preview2
+ARCH = x64
+
+%:
+	dh $@
+
+TOOLS_VER = $(shell cat BuildToolsVersion.txt)
+
+src/Run/Run.csproj.orig:
+	[ -e src/Run/Run.csproj.orig ] || mv src/Run/Run.csproj src/Run/Run.csproj.orig
+	rm -rf src/Run/NuGet.config
+	# Rebuild Run.csproj
+	cd src/Run && dotnet new console
+	rm src/Run/Program.cs
+	cd src/Run && dotnet add package Newtonsoft.Json
+
+override_dh_auto_build-indep: src/Run/Run.csproj.orig
+	cd src/Run && dotnet restore
+
+	cd src/Run && dotnet publish -c Release
+
+D=debian/dotnet-bootstrap-buildtools/usr/lib/dotnet/bootstrap-tools
+
+override_dh_auto_install:
+	mkdir -p $D
+	cp src/Run/bin/Release/netcoreapp2.0/publish/* $D
+	cd $D; for i in Run*; do mv $$i r$${i#R}; done
+	mv $D/run.dll $D/run.exe
+	sed -i '/Run.dll/s//run.exe/' $D/run.deps.json
+
+override_dh_auto_clean:
+	rm -rf src/Run/NuGet.config src/Run/bin src/Run/obj
+	[ -e src/Run/Run.csproj.orig ] && mv src/Run/Run.csproj.orig src/Run/Run.csproj
